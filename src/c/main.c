@@ -216,7 +216,9 @@ static void apply_background() {
   s_bg_bitmap = gbitmap_create_with_resource(
     s_settings.background == 1
       ? RESOURCE_ID_BACKGROUND_DARK
-      : RESOURCE_ID_BACKGROUND);
+      : s_settings.background == 2
+        ? RESOURCE_ID_BACKGROUND_PURPLE
+        : RESOURCE_ID_BACKGROUND);
   bitmap_layer_set_bitmap(s_bg_layer, s_bg_bitmap);
 }
 
