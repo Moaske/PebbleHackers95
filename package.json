@@ -1,0 +1,74 @@
+{
+    "author": "MakeAwesomeHappen",
+    "dependencies": {
+        "@rebble/clay": "^1.0.10"
+    },
+    "keywords": [
+        "pebble-app"
+    ],
+    "name": "hacker95",
+    "pebble": {
+        "capabilities": [
+            "configurable",
+            "health"
+        ],
+        "displayName": "Hacker95",
+        "enableMultiJS": true,
+        "messageKeys": [
+            "ColorMain",
+            "ColorTypewriter"
+        ],
+        "projectType": "native",
+        "resources": {
+            "media": [
+                {
+                    "file": "fonts/Confidential.ttf",
+                    "name": "FONT_CONFIDENTIAL_52",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/Confidential.ttf",
+                    "name": "FONT_CONFIDENTIAL_24",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/Confidential.ttf",
+                    "name": "FONT_CONFIDENTIAL_18",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "images/app_icon_hackers95.png",
+                    "menuIcon": true,
+                    "name": "APP_ICON_HACKERS95",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/hackers95_backgr.png",
+                    "name": "BACKGROUND",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "characterRegex": "[!-%]",
+                    "file": "fonts/PebbleMDIcons18.ttf",
+                    "name": "FONT_MDI_ICONS_18",
+                    "targetPlatforms": null,
+                    "type": "font"
+                }
+            ]
+        },
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "emery"
+        ],
+        "uuid": "fc9a7d8c-52c3-49fe-8d55-eae5c9fd287e",
+        "watchapp": {
+            "watchface": true
+        }
+    },
+    "version": "1.0.0"
+}
