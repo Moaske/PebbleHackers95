@@ -28,8 +28,8 @@ static Settings s_settings;
 // Typewriter box: just above the clock, with a 4px gap
 #define TYPE_H          58    // room for 2 lines at 24px + leading
 #define TYPE_Y          (CLOCK_Y - TYPE_H - 4)
-#define TYPE_WORD_MS    600   // delay between each word appearing
-#define TYPE_CLEAR_MS   500   // pause after last word before clearing
+#define TYPE_WORD_MS    300   // delay between each word appearing
+#define TYPE_CLEAR_MS   800   // pause after last word before clearing
 
 // Clock: centered around 2/3 down
 #define CLOCK_FONT_H    52
@@ -107,6 +107,13 @@ static char         s_type_buf[64];   // accumulates words as they appear
 static int          s_type_word_idx;  // next word to add (0 = not started)
 static AppTimer    *s_type_timer;     // active timer handle
 
+// Light poll: rising-edge detection for backlight on (wrist flick, button, tap)
+// Identical approach to MetroWP8 — catches all causes of backlight turning on,
+// including emulator button presses where accel_tap never fires.
+#define LIGHT_POLL_MS     250
+static AppTimer *s_light_poll_timer = NULL;
+static bool      s_light_was_on     = false;
+
 // MDI icon characters (from PebbleMDIcons18.ttf)
 #define ICON_BATTERY     "!"
 #define ICON_WALK        "\""
@@ -161,6 +168,25 @@ static void typewriter_start() {
 
   // First word fires immediately
   s_type_timer = app_timer_register(1, typewriter_step_cb, NULL);
+}
+
+// ── Button handler (select = typewriter trigger, useful for emulator/GIF) ─────
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  typewriter_start();
+}
+
+static void click_config_provider(void *context) {
+  window_single_click_subscribe(BUTTON_ID_BACK, select_click_handler);
+}
+
+// ── Light poll: rising-edge trigger (works in emulator too) ─────────────────
+static void light_poll_callback(void *context) {
+  bool now_on = light_is_on();
+  if (now_on && !s_light_was_on) {
+    typewriter_start();
+  }
+  s_light_was_on = now_on;
+  s_light_poll_timer = app_timer_register(LIGHT_POLL_MS, light_poll_callback, NULL);
 }
 
 // ── Tap / flick handler ───────────────────────────────────────────────────────
@@ -303,6 +329,8 @@ static TextLayer *make_val_layer(GRect frame, GFont font) {
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
 
+  window_set_click_config_provider(window, click_config_provider);
+
   // Background image
   s_bg_bitmap = gbitmap_create_with_resource(RESOURCE_ID_BACKGROUND);
   s_bg_layer  = bitmap_layer_create(GRect(0, 0, SCREEN_W, SCREEN_H));
@@ -442,6 +470,9 @@ static void init() {
   battery_state_service_subscribe(battery_handler);
   health_service_events_subscribe(health_handler, NULL);
   accel_tap_service_subscribe(accel_tap_handler);
+
+  s_light_was_on    = light_is_on();
+  s_light_poll_timer = app_timer_register(LIGHT_POLL_MS, light_poll_callback, NULL);
 }
 
 static void deinit() {
@@ -449,6 +480,10 @@ static void deinit() {
   battery_state_service_unsubscribe();
   health_service_events_unsubscribe();
   accel_tap_service_unsubscribe();
+  if (s_light_poll_timer) {
+    app_timer_cancel(s_light_poll_timer);
+    s_light_poll_timer = NULL;
+  }
   window_destroy(s_window);
 }
 

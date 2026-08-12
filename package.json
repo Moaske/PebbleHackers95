@@ -6,13 +6,13 @@
     "keywords": [
         "pebble-app"
     ],
-    "name": "hacker95",
+    "name": "hackers95",
     "pebble": {
         "capabilities": [
             "configurable",
             "health"
         ],
-        "displayName": "Hacker95",
+        "displayName": "Hackers95",
         "enableMultiJS": true,
         "messageKeys": [
             "ColorMain",
@@ -70,5 +70,5 @@
             "watchface": true
         }
     },
-    "version": "1.0.0"
+    "version": "1.0.2"
 }
