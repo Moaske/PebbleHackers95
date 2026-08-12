@@ -17,6 +17,8 @@
 typedef struct {
   GColor color_main;        // clock, date, bar text
   GColor color_typewriter;  // typewriter text
+  uint8_t typewriter_text;  // 0 = "Mess with the best...", 1 = "Hack the planet!"
+  uint8_t background;       // 0 = BACKGROUND, 1 = BACKGROUND_DARK
 } Settings;
 
 static Settings s_settings;
@@ -66,11 +68,19 @@ static Settings s_settings;
 #define VAL_W_2         (SEC_W_2 - ICON_W)
 
 // ── Typewriter data ───────────────────────────────────────────────────────────
-// Words of the two-line message; \n marks the line break position
-static const char * const WORDS[] = {
+static const char * const WORDS_A[] = {
   "Mess", "with", "the", "best\n", "die", "like", "the", "rest!"
 };
-#define WORD_COUNT      8
+#define WORD_COUNT_A    8
+
+static const char * const WORDS_B[] = {
+  "Hack", "the", "planet!"
+};
+#define WORD_COUNT_B    3
+
+// Active word list — set from settings at runtime
+static const char * const *s_words    = WORDS_A;
+static int                 s_word_count = WORD_COUNT_A;
 
 // ── Globals ───────────────────────────────────────────────────────────────────
 static Window       *s_window;
@@ -135,7 +145,7 @@ static void typewriter_clear_cb(void *context) {
 static void typewriter_step_cb(void *context) {
   s_type_timer = NULL;
 
-  if (s_type_word_idx >= WORD_COUNT) {
+  if (s_type_word_idx >= s_word_count) {
     // All words shown — wait then clear
     s_type_timer = app_timer_register(TYPE_CLEAR_MS, typewriter_clear_cb, NULL);
     return;
@@ -145,7 +155,7 @@ static void typewriter_step_cb(void *context) {
   if (s_type_word_idx > 0) {
     strncat(s_type_buf, " ", sizeof(s_type_buf) - strlen(s_type_buf) - 1);
   }
-  strncat(s_type_buf, WORDS[s_type_word_idx], sizeof(s_type_buf) - strlen(s_type_buf) - 1);
+  strncat(s_type_buf, s_words[s_type_word_idx], sizeof(s_type_buf) - strlen(s_type_buf) - 1);
   s_type_word_idx++;
 
   text_layer_set_text(s_type_layer, s_type_buf);
@@ -198,6 +208,28 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 }
 
 // ── Settings helpers ────────────────────────────────────────────────────────
+static void apply_background() {
+  // Swap bitmap in place — destroy old, load new, re-set on layer
+  if (s_bg_bitmap) {
+    gbitmap_destroy(s_bg_bitmap);
+  }
+  s_bg_bitmap = gbitmap_create_with_resource(
+    s_settings.background == 1
+      ? RESOURCE_ID_BACKGROUND_DARK
+      : RESOURCE_ID_BACKGROUND);
+  bitmap_layer_set_bitmap(s_bg_layer, s_bg_bitmap);
+}
+
+static void apply_typewriter_text() {
+  if (s_settings.typewriter_text == 1) {
+    s_words      = WORDS_B;
+    s_word_count = WORD_COUNT_B;
+  } else {
+    s_words      = WORDS_A;
+    s_word_count = WORD_COUNT_A;
+  }
+}
+
 static void apply_colors() {
   text_layer_set_text_color(s_clock_layer,        s_settings.color_main);
   text_layer_set_text_color(s_ampm_layer,         s_settings.color_main);
@@ -215,9 +247,12 @@ static void load_settings() {
   // Defaults: white for everything
   s_settings.color_main       = GColorWhite;
   s_settings.color_typewriter = GColorWhite;
+  s_settings.typewriter_text  = 0;
+  s_settings.background       = 0;
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   }
+  apply_typewriter_text();
 }
 
 // ── Inbox: receive settings from Clay ────────────────────────────────────────
@@ -230,8 +265,36 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   t = dict_find(iter, MESSAGE_KEY_ColorTypewriter);
   if (t) s_settings.color_typewriter = GColorFromHEX(t->value->int32);
 
+  t = dict_find(iter, MESSAGE_KEY_TypewriterText);
+  if (t) {
+    uint8_t val = 0;
+    if (t->type == TUPLE_CSTRING) {
+      val = (uint8_t)atoi(t->value->cstring);
+    } else {
+      val = (uint8_t)t->value->int32;
+    }
+    s_settings.typewriter_text = val;
+    apply_typewriter_text();
+  }
+
+  bool bg_changed = false;
+  t = dict_find(iter, MESSAGE_KEY_Background);
+  if (t) {
+    uint8_t new_bg = 0;
+    if (t->type == TUPLE_CSTRING) {
+      new_bg = (uint8_t)atoi(t->value->cstring);
+    } else {
+      new_bg = (uint8_t)t->value->int32;
+    }
+    if (new_bg != s_settings.background) {
+      s_settings.background = new_bg;
+      bg_changed = true;
+    }
+  }
+
   persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   apply_colors();
+  if (bg_changed) apply_background();
 }
 
 // ── Clock / date / health update helpers ─────────────────────────────────────
@@ -416,6 +479,7 @@ static void window_load(Window *window) {
   update_sleep();
   update_battery(battery_state_service_peek());
   apply_colors();
+  apply_background();
 }
 
 static void window_unload(Window *window) {

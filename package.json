@@ -1,5 +1,5 @@
 {
-    "author": "MakeAwesomeHappen",
+    "author": "Moaske",
     "dependencies": {
         "@rebble/clay": "^1.0.10"
     },
@@ -16,7 +16,9 @@
         "enableMultiJS": true,
         "messageKeys": [
             "ColorMain",
-            "ColorTypewriter"
+            "ColorTypewriter",
+            "TypewriterText",
+            "Background"
         ],
         "projectType": "native",
         "resources": {
@@ -58,6 +60,12 @@
                     "name": "FONT_MDI_ICONS_18",
                     "targetPlatforms": null,
                     "type": "font"
+                },
+                {
+                    "file": "images/hackers95_backgr_dark.png",
+                    "name": "BACKGROUND_DARK",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
                 }
             ]
         },
@@ -70,5 +78,5 @@
             "watchface": true
         }
     },
-    "version": "1.0.2"
+    "version": "1.1.0"
 }
