@@ -72,6 +72,18 @@
                     "name": "BACKGROUND_PURPLE",
                     "targetPlatforms": null,
                     "type": "bitmap"
+                },
+                {
+                    "file": "images/hackers95_backgr_blue.png",
+                    "name": "BACKGROUND_BLUE",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/hackers95_backgr_dade.png",
+                    "name": "BACKGROUND_DADE",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
                 }
             ]
         },
@@ -84,5 +96,5 @@
             "watchface": true
         }
     },
-    "version": "1.1.1"
+    "version": "1.1.2"
 }

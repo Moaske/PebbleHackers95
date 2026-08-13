@@ -214,11 +214,11 @@ static void apply_background() {
     gbitmap_destroy(s_bg_bitmap);
   }
   s_bg_bitmap = gbitmap_create_with_resource(
-    s_settings.background == 1
-      ? RESOURCE_ID_BACKGROUND_DARK
-      : s_settings.background == 2
-        ? RESOURCE_ID_BACKGROUND_PURPLE
-        : RESOURCE_ID_BACKGROUND);
+    s_settings.background == 1 ? RESOURCE_ID_BACKGROUND_DARK   :
+    s_settings.background == 2 ? RESOURCE_ID_BACKGROUND_PURPLE :
+    s_settings.background == 3 ? RESOURCE_ID_BACKGROUND_BLUE   :
+    s_settings.background == 4 ? RESOURCE_ID_BACKGROUND_DADE   :
+                                  RESOURCE_ID_BACKGROUND);
   bitmap_layer_set_bitmap(s_bg_layer, s_bg_bitmap);
 }
 
