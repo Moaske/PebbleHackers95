@@ -34,7 +34,7 @@ module.exports = [
         "defaultValue": "Typewriter text"
       },
       {
-        "type": "radiogroup",
+        "type": "select",
         "messageKey": "TypewriterText",
         "label": "Message",
         "defaultValue": 0,
@@ -53,16 +53,16 @@ module.exports = [
         "defaultValue": "Background"
       },
       {
-        "type": "radiogroup",
+        "type": "select",
         "messageKey": "Background",
         "label": "Choose background",
         "defaultValue": 0,
         "options": [
-          { "label": "Light", "value": 0 },
-          { "label": "Dark", "value": 1 },
-          { "label": "Purple", "value": 2 },
-          { "label": "Blue", "value": 3 },
-          { "label": "Dade", "value": 4 }
+          { "label": "Gibson&Dade Light", "value": 0 },
+          { "label": "Gibson&Dade Dark", "value": 1 },
+          { "label": "Filmposter Purple", "value": 2 },
+          { "label": "Filmposter Blue", "value": 3 },
+          { "label": "Crash&Burn", "value": 4 }
         ]
       },
       {
