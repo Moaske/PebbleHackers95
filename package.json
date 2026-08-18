@@ -19,7 +19,8 @@
             "ColorTypewriter",
             "TypewriterText",
             "Background",
-            "ShadowOn"
+            "ShadowOn",
+            "Filter"
         ],
         "projectType": "native",
         "resources": {
@@ -75,6 +76,18 @@
                     "type": "bitmap"
                 },
                 {
+                    "file": "images/filter_66.png",
+                    "name": "FILTER_66",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/filter_33.png",
+                    "name": "FILTER_33",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
                     "file": "images/hackers95_backgr_blue.png",
                     "name": "BACKGROUND_BLUE",
                     "targetPlatforms": null,
@@ -97,5 +110,5 @@
             "watchface": true
         }
     },
-    "version": "1.2.0"
+    "version": "1.3.0"
 }

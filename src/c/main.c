@@ -17,6 +17,7 @@ typedef struct {
   GColor  color_typewriter;  // typewriter text
   uint8_t typewriter_text;   // 0 = "Mess with the best...", 1 = "Hack the planet!"
   uint8_t background;        // 0-4
+  uint8_t filter;            // 0=none, 1=33% black, 2=66% black
   bool    shadow_on;         // drop shadow behind clock/date/typewriter
 } Settings;
 
@@ -82,6 +83,8 @@ static int                 s_word_count = WORD_COUNT_A;
 static Window      *s_window;
 static BitmapLayer *s_bg_layer;
 static GBitmap     *s_bg_bitmap;
+static BitmapLayer *s_filter_layer;
+static GBitmap     *s_filter_bitmap;
 
 // Custom layers (LayerUpdateProc — replaces TextLayer for clock/date/typewriter)
 static Layer       *s_clock_layer;
@@ -279,6 +282,23 @@ static void battery_val_update_proc(Layer *layer, GContext *ctx) {
     GTextOverflowModeWordWrap, GTextAlignmentLeft, s_settings.color_main, s_settings.shadow_on);
 }
 
+static void apply_filter() {
+  if (s_filter_bitmap) {
+    gbitmap_destroy(s_filter_bitmap);
+    s_filter_bitmap = NULL;
+  }
+  if (s_settings.filter == 0) {
+    layer_set_hidden(bitmap_layer_get_layer(s_filter_layer), true);
+    return;
+  }
+  s_filter_bitmap = gbitmap_create_with_resource(
+    s_settings.filter == 2
+      ? RESOURCE_ID_FILTER_66
+      : RESOURCE_ID_FILTER_33);
+  bitmap_layer_set_bitmap(s_filter_layer, s_filter_bitmap);
+  layer_set_hidden(bitmap_layer_get_layer(s_filter_layer), false);
+}
+
 static void apply_background() {
   if (s_bg_bitmap) gbitmap_destroy(s_bg_bitmap);
   s_bg_bitmap = gbitmap_create_with_resource(
@@ -317,6 +337,7 @@ static void load_settings() {
   s_settings.color_typewriter = GColorWhite;
   s_settings.typewriter_text  = 0;
   s_settings.background       = 0;
+  s_settings.filter           = 0;
   s_settings.shadow_on        = false;
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
@@ -346,6 +367,17 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
     s_settings.shadow_on = (bool)t->value->int32;
   }
 
+  bool filter_changed = false;
+  t = dict_find(iter, MESSAGE_KEY_Filter);
+  if (t) {
+    uint8_t new_f = (t->type == TUPLE_CSTRING)
+      ? (uint8_t)atoi(t->value->cstring) : (uint8_t)t->value->int32;
+    if (new_f != s_settings.filter) {
+      s_settings.filter = new_f;
+      filter_changed = true;
+    }
+  }
+
   bool bg_changed = false;
   t = dict_find(iter, MESSAGE_KEY_Background);
   if (t) {
@@ -360,6 +392,7 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   apply_colors();
   if (bg_changed) apply_background();
+  if (filter_changed) apply_filter();
 }
 
 // ── Clock / date / health update helpers ──────────────────────────────────────
@@ -453,6 +486,13 @@ static void window_load(Window *window) {
   s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_18));
   s_font_icons = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_MDI_ICONS_18));
 
+  // Neutral density filter layer — sits above background, below text
+  s_filter_bitmap = NULL;
+  s_filter_layer  = bitmap_layer_create(GRect(0, 0, SCREEN_W, SCREEN_H));
+  bitmap_layer_set_compositing_mode(s_filter_layer, GCompOpSet);
+  layer_set_hidden(bitmap_layer_get_layer(s_filter_layer), true);
+  layer_add_child(root, bitmap_layer_get_layer(s_filter_layer));
+
   // Typewriter custom layer
   s_type_layer = layer_create(GRect(0, TYPE_Y, SCREEN_W, TYPE_H));
   layer_set_update_proc(s_type_layer, type_layer_update_proc);
@@ -503,6 +543,7 @@ static void window_load(Window *window) {
   update_battery(battery_state_service_peek());
   apply_colors();
   apply_background();
+  apply_filter();
 }
 
 static void window_unload(Window *window) {
@@ -522,6 +563,8 @@ static void window_unload(Window *window) {
   layer_destroy(s_battery_icon_layer);
   layer_destroy(s_battery_val_layer);
 
+  bitmap_layer_destroy(s_filter_layer);
+  if (s_filter_bitmap) gbitmap_destroy(s_filter_bitmap);
   bitmap_layer_destroy(s_bg_layer);
   gbitmap_destroy(s_bg_bitmap);
 

@@ -78,6 +78,26 @@ module.exports = [
     ]
   },
   {
+    "type": "section",
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "Neutral density filter"
+      },
+      {
+        "type": "select",
+        "messageKey": "Filter",
+        "label": "Background darkening",
+        "defaultValue": 0,
+        "options": [
+          { "label": "None", "value": 0 },
+          { "label": "Light (33%)", "value": 1 },
+          { "label": "Heavy (66%)", "value": 2 }
+        ]
+      }
+    ]
+  },
+  {
     "type": "submit",
     "defaultValue": "Save"
   }
