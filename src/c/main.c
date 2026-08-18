@@ -1,12 +1,10 @@
 /*
- * Watchface for Pebble Emery
- * - Background image
- * - Typewriter gimmick: wrist-flick triggers word-by-word text, then clears
- * - Clock (12/24h), centered ~2/3 down
- * - Date line  Ddd DD Mon, follows watch language
- * - Bottom bar: 3 sections, each split 20px icon + value (FONT_CONFIDENTIAL_18)
- *
- * Emery display: 200x228 px
+ * Watchface for Pebble Emery (200x228px)
+ * - Background image (5 variants, swappable via settings)
+ * - Clock (12/24h) + AM/PM + Date: custom LayerUpdateProc with optional drop shadow
+ * - Typewriter gimmick: wrist-flick, custom LayerUpdateProc with optional drop shadow
+ * - Bottom bar: steps | sleep | battery with MDI icons
+ * - Clay settings: colours, typewriter text, background, shadow toggle
  */
 
 #include <pebble.h>
@@ -15,10 +13,11 @@
 #define SETTINGS_KEY    42
 
 typedef struct {
-  GColor color_main;        // clock, date, bar text
-  GColor color_typewriter;  // typewriter text
-  uint8_t typewriter_text;  // 0 = "Mess with the best...", 1 = "Hack the planet!"
-  uint8_t background;       // 0 = BACKGROUND, 1 = BACKGROUND_DARK
+  GColor  color_main;        // clock, date, bar text
+  GColor  color_typewriter;  // typewriter text
+  uint8_t typewriter_text;   // 0 = "Mess with the best...", 1 = "Hack the planet!"
+  uint8_t background;        // 0-4
+  bool    shadow_on;         // drop shadow behind clock/date/typewriter
 } Settings;
 
 static Settings s_settings;
@@ -27,41 +26,39 @@ static Settings s_settings;
 #define SCREEN_W        200
 #define SCREEN_H        228
 
-// Typewriter box: just above the clock, with a 4px gap
-#define TYPE_H          58    // room for 2 lines at 24px + leading
-#define TYPE_Y          (CLOCK_Y - TYPE_H - 4)
-#define TYPE_WORD_MS    300   // delay between each word appearing
-#define TYPE_CLEAR_MS   800   // pause after last word before clearing
+#define SHADOW_DX       3     // shadow offset X
+#define SHADOW_DY       3     // shadow offset Y
 
-// Clock: centered around 2/3 down
+// Clock
 #define CLOCK_FONT_H    52
 #define CLOCK_Y         (SCREEN_H * 2 / 3 - CLOCK_FONT_H / 2 - 20)  // 106
 #define CLOCK_H         58
 
-// AM/PM label: just right of the centered clock text.
-// At 52px font, "00:00" is ~110px wide, centered in 200px → right edge ~155px
+// AM/PM: just right of centered clock digits
 #define AMPM_W          30
 #define AMPM_H          20
 #define AMPM_X          155
 #define AMPM_Y          (CLOCK_Y + CLOCK_H - AMPM_H)
 
 // Date: directly below clock
-#define DATE_Y          (CLOCK_Y + CLOCK_H)                           // 164
+#define DATE_Y          (CLOCK_Y + CLOCK_H)
 #define DATE_H          28
 
-// Bottom bar: 24px tall at very bottom
-#define BAR_H           24
-#define BAR_Y           (SCREEN_H - BAR_H)                            // 204
+// Typewriter: just above clock
+#define TYPE_H          58
+#define TYPE_Y          (CLOCK_Y - TYPE_H - 4)
+#define TYPE_WORD_MS    300
+#define TYPE_CLEAR_MS   800
 
-// Three equal sections: 200 / 3
+// Bottom bar
+#define BAR_H           24
+#define BAR_Y           (SCREEN_H - BAR_H)
 #define SEC_W_0         66
 #define SEC_W_1         66
 #define SEC_W_2         68
 #define SEC_X_0         0
 #define SEC_X_1         (SEC_X_0 + SEC_W_0)
 #define SEC_X_2         (SEC_X_1 + SEC_W_1)
-
-// Within each section: 20px icon slot, rest is value slot
 #define ICON_W          20
 #define VAL_W_0         (SEC_W_0 - ICON_W)
 #define VAL_W_1         (SEC_W_1 - ICON_W)
@@ -78,27 +75,26 @@ static const char * const WORDS_B[] = {
 };
 #define WORD_COUNT_B    3
 
-// Active word list — set from settings at runtime
-static const char * const *s_words    = WORDS_A;
+static const char * const *s_words     = WORDS_A;
 static int                 s_word_count = WORD_COUNT_A;
 
 // ── Globals ───────────────────────────────────────────────────────────────────
-static Window       *s_window;
+static Window      *s_window;
+static BitmapLayer *s_bg_layer;
+static GBitmap     *s_bg_bitmap;
 
-static BitmapLayer  *s_bg_layer;
-static GBitmap      *s_bg_bitmap;
+// Custom layers (LayerUpdateProc — replaces TextLayer for clock/date/typewriter)
+static Layer       *s_clock_layer;
+static Layer       *s_date_layer;
+static Layer       *s_type_layer;
 
-static TextLayer    *s_type_layer;
-static TextLayer    *s_clock_layer;
-static TextLayer    *s_ampm_layer;
-static TextLayer    *s_date_layer;
-
-static TextLayer    *s_steps_icon_layer;
-static TextLayer    *s_steps_val_layer;
-static TextLayer    *s_sleep_icon_layer;
-static TextLayer    *s_sleep_val_layer;
-static TextLayer    *s_battery_icon_layer;
-static TextLayer    *s_battery_val_layer;
+// Bottom bar: custom layers for shadow support
+static Layer       *s_steps_icon_layer;
+static Layer       *s_steps_val_layer;
+static Layer       *s_sleep_icon_layer;
+static Layer       *s_sleep_val_layer;
+static Layer       *s_battery_icon_layer;
+static Layer       *s_battery_val_layer;
 
 static GFont        s_font_clock;
 static GFont        s_font_date;
@@ -111,108 +107,180 @@ static char s_date_buf[16];
 static char s_steps_buf[10];
 static char s_sleep_buf[10];
 static char s_battery_buf[8];
+static bool s_show_ampm = false;
 
 // Typewriter state
-static char         s_type_buf[64];   // accumulates words as they appear
-static int          s_type_word_idx;  // next word to add (0 = not started)
-static AppTimer    *s_type_timer;     // active timer handle
+static char      s_type_buf[64];
+static int       s_type_word_idx;
+static bool      s_type_visible;
+static AppTimer *s_type_timer;
 
-// Light poll: rising-edge detection for backlight on (wrist flick, button, tap)
-// Identical approach to MetroWP8 — catches all causes of backlight turning on,
-// including emulator button presses where accel_tap never fires.
-#define LIGHT_POLL_MS     250
+// Light poll
+#define LIGHT_POLL_MS   250
 static AppTimer *s_light_poll_timer = NULL;
 static bool      s_light_was_on     = false;
 
-// MDI icon characters (from PebbleMDIcons18.ttf)
+// MDI icon characters
 #define ICON_BATTERY     "!"
 #define ICON_WALK        "\""
 #define ICON_HEART_PULSE "#"
 #define ICON_CHAT_SLEEP  "$"
 #define ICON_SHOE        "%"
+#define ICON_BATTERY_V   "&"   // mdiBattery rotated 90deg CW
 
-// ── Typewriter logic ──────────────────────────────────────────────────────────
-
-// Called after the clear delay: hide the layer and reset state
-static void typewriter_clear_cb(void *context) {
-  s_type_timer = NULL;
-  layer_set_hidden(text_layer_get_layer(s_type_layer), true);
-  s_type_buf[0]    = '\0';
-  s_type_word_idx  = 0;
+// ── Shadow draw helper ────────────────────────────────────────────────────────
+// Draws text twice: shadow pass in black offset by (SHADOW_DX, SHADOW_DY),
+// then the main pass in the chosen colour at the original position.
+static void draw_text_shadowed(GContext *ctx, const char *text, GFont font,
+                                GRect bounds, GTextOverflowMode overflow,
+                                GTextAlignment align, GColor color, bool shadow) {
+  if (shadow) {
+    GRect shadow_bounds = GRect(bounds.origin.x + SHADOW_DX,
+                                bounds.origin.y + SHADOW_DY,
+                                bounds.size.w, bounds.size.h);
+    graphics_context_set_text_color(ctx, GColorBlack);
+    graphics_draw_text(ctx, text, font, shadow_bounds, overflow, align, NULL);
+  }
+  graphics_context_set_text_color(ctx, color);
+  graphics_draw_text(ctx, text, font, bounds, overflow, align, NULL);
 }
 
-// Called each TYPE_WORD_MS to append the next word
+// ── Clock layer update proc ───────────────────────────────────────────────────
+static void clock_layer_update_proc(Layer *layer, GContext *ctx) {
+  GRect bounds = layer_get_bounds(layer);
+  bool shadow = s_settings.shadow_on;
+  GColor col  = s_settings.color_main;
+
+  // Clock digits, centered
+  draw_text_shadowed(ctx, s_clock_buf, s_font_clock, bounds,
+                     GTextOverflowModeWordWrap, GTextAlignmentCenter, col, shadow);
+
+  // AM/PM, bottom-right of clock box — only in 12h mode
+  if (s_show_ampm) {
+    GRect ampm_bounds = GRect(AMPM_X - bounds.origin.x,
+                              AMPM_Y - bounds.origin.y,
+                              AMPM_W, AMPM_H);
+    draw_text_shadowed(ctx, s_ampm_buf, s_font_val, ampm_bounds,
+                       GTextOverflowModeWordWrap, GTextAlignmentCenter, col, shadow);
+  }
+}
+
+// ── Date layer update proc ────────────────────────────────────────────────────
+static void date_layer_update_proc(Layer *layer, GContext *ctx) {
+  GRect bounds = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, s_date_buf, s_font_date, bounds,
+                     GTextOverflowModeWordWrap, GTextAlignmentCenter,
+                     s_settings.color_main, s_settings.shadow_on);
+}
+
+// ── Typewriter layer update proc ──────────────────────────────────────────────
+static void type_layer_update_proc(Layer *layer, GContext *ctx) {
+  if (!s_type_visible || s_type_buf[0] == '\0') return;
+  GRect bounds = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, s_type_buf, s_font_date, bounds,
+                     GTextOverflowModeWordWrap, GTextAlignmentCenter,
+                     s_settings.color_typewriter, s_settings.shadow_on);
+}
+
+// ── Typewriter logic ──────────────────────────────────────────────────────────
+static void typewriter_clear_cb(void *context) {
+  s_type_timer   = NULL;
+  s_type_visible = false;
+  layer_mark_dirty(s_type_layer);
+  s_type_buf[0]   = '\0';
+  s_type_word_idx = 0;
+}
+
 static void typewriter_step_cb(void *context) {
   s_type_timer = NULL;
 
   if (s_type_word_idx >= s_word_count) {
-    // All words shown — wait then clear
     s_type_timer = app_timer_register(TYPE_CLEAR_MS, typewriter_clear_cb, NULL);
     return;
   }
 
-  // Append next word (with a space separator after the first)
   if (s_type_word_idx > 0) {
     strncat(s_type_buf, " ", sizeof(s_type_buf) - strlen(s_type_buf) - 1);
   }
   strncat(s_type_buf, s_words[s_type_word_idx], sizeof(s_type_buf) - strlen(s_type_buf) - 1);
   s_type_word_idx++;
 
-  text_layer_set_text(s_type_layer, s_type_buf);
-  layer_set_hidden(text_layer_get_layer(s_type_layer), false);
+  s_type_visible = true;
+  layer_mark_dirty(s_type_layer);
 
-  // Schedule next word
   s_type_timer = app_timer_register(TYPE_WORD_MS, typewriter_step_cb, NULL);
 }
 
-// Kick off or restart the typewriter sequence
 static void typewriter_start() {
-  // Cancel any running sequence
   if (s_type_timer) {
     app_timer_cancel(s_type_timer);
     s_type_timer = NULL;
   }
   s_type_buf[0]   = '\0';
   s_type_word_idx = 0;
-  layer_set_hidden(text_layer_get_layer(s_type_layer), true);
-
-  // First word fires immediately
+  s_type_visible  = false;
+  layer_mark_dirty(s_type_layer);
   s_type_timer = app_timer_register(1, typewriter_step_cb, NULL);
 }
 
-// ── Button handler (select = typewriter trigger, useful for emulator/GIF) ─────
-static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+// ── Button / tap / light poll ─────────────────────────────────────────────────
+static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
   typewriter_start();
 }
 
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_BACK, select_click_handler);
+  window_single_click_subscribe(BUTTON_ID_BACK, back_click_handler);
 }
 
-// ── Light poll: rising-edge trigger (works in emulator too) ─────────────────
 static void light_poll_callback(void *context) {
   bool now_on = light_is_on();
   if (now_on && !s_light_was_on) {
     typewriter_start();
   }
-  s_light_was_on = now_on;
+  s_light_was_on     = now_on;
   s_light_poll_timer = app_timer_register(LIGHT_POLL_MS, light_poll_callback, NULL);
 }
 
-// ── Tap / flick handler ───────────────────────────────────────────────────────
 static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
-  // Fire on any tap/flick — remove axis filter to ensure it triggers
-  (void)axis;
-  (void)direction;
+  (void)axis; (void)direction;
   typewriter_start();
 }
 
-// ── Settings helpers ────────────────────────────────────────────────────────
+// ── Settings ──────────────────────────────────────────────────────────────────
+// ── Bottom bar LayerUpdateProcs ──────────────────────────────────────────────
+static void steps_icon_update_proc(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, ICON_WALK, s_font_icons, b,
+    GTextOverflowModeWordWrap, GTextAlignmentCenter, s_settings.color_main, s_settings.shadow_on);
+}
+static void steps_val_update_proc(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, s_steps_buf, s_font_val, b,
+    GTextOverflowModeWordWrap, GTextAlignmentLeft, s_settings.color_main, s_settings.shadow_on);
+}
+static void sleep_icon_update_proc(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, ICON_CHAT_SLEEP, s_font_icons, b,
+    GTextOverflowModeWordWrap, GTextAlignmentCenter, s_settings.color_main, s_settings.shadow_on);
+}
+static void sleep_val_update_proc(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, s_sleep_buf, s_font_val, b,
+    GTextOverflowModeWordWrap, GTextAlignmentLeft, s_settings.color_main, s_settings.shadow_on);
+}
+static void battery_icon_update_proc(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, ICON_BATTERY_V, s_font_icons, b,
+    GTextOverflowModeWordWrap, GTextAlignmentCenter, s_settings.color_main, s_settings.shadow_on);
+}
+static void battery_val_update_proc(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  draw_text_shadowed(ctx, s_battery_buf, s_font_val, b,
+    GTextOverflowModeWordWrap, GTextAlignmentLeft, s_settings.color_main, s_settings.shadow_on);
+}
+
 static void apply_background() {
-  // Swap bitmap in place — destroy old, load new, re-set on layer
-  if (s_bg_bitmap) {
-    gbitmap_destroy(s_bg_bitmap);
-  }
+  if (s_bg_bitmap) gbitmap_destroy(s_bg_bitmap);
   s_bg_bitmap = gbitmap_create_with_resource(
     s_settings.background == 1 ? RESOURCE_ID_BACKGROUND_DARK   :
     s_settings.background == 2 ? RESOURCE_ID_BACKGROUND_PURPLE :
@@ -233,31 +301,30 @@ static void apply_typewriter_text() {
 }
 
 static void apply_colors() {
-  text_layer_set_text_color(s_clock_layer,        s_settings.color_main);
-  text_layer_set_text_color(s_ampm_layer,         s_settings.color_main);
-  text_layer_set_text_color(s_date_layer,         s_settings.color_main);
-  text_layer_set_text_color(s_steps_icon_layer,   s_settings.color_main);
-  text_layer_set_text_color(s_steps_val_layer,    s_settings.color_main);
-  text_layer_set_text_color(s_sleep_icon_layer,   s_settings.color_main);
-  text_layer_set_text_color(s_sleep_val_layer,    s_settings.color_main);
-  text_layer_set_text_color(s_battery_icon_layer, s_settings.color_main);
-  text_layer_set_text_color(s_battery_val_layer,  s_settings.color_main);
-  text_layer_set_text_color(s_type_layer,         s_settings.color_typewriter);
+  layer_mark_dirty(s_clock_layer);
+  layer_mark_dirty(s_date_layer);
+  layer_mark_dirty(s_type_layer);
+  layer_mark_dirty(s_steps_icon_layer);
+  layer_mark_dirty(s_steps_val_layer);
+  layer_mark_dirty(s_sleep_icon_layer);
+  layer_mark_dirty(s_sleep_val_layer);
+  layer_mark_dirty(s_battery_icon_layer);
+  layer_mark_dirty(s_battery_val_layer);
 }
 
 static void load_settings() {
-  // Defaults: white for everything
   s_settings.color_main       = GColorWhite;
   s_settings.color_typewriter = GColorWhite;
   s_settings.typewriter_text  = 0;
   s_settings.background       = 0;
+  s_settings.shadow_on        = false;
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   }
   apply_typewriter_text();
 }
 
-// ── Inbox: receive settings from Clay ────────────────────────────────────────
+// ── Inbox ─────────────────────────────────────────────────────────────────────
 static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *t;
 
@@ -269,25 +336,21 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
 
   t = dict_find(iter, MESSAGE_KEY_TypewriterText);
   if (t) {
-    uint8_t val = 0;
-    if (t->type == TUPLE_CSTRING) {
-      val = (uint8_t)atoi(t->value->cstring);
-    } else {
-      val = (uint8_t)t->value->int32;
-    }
-    s_settings.typewriter_text = val;
+    s_settings.typewriter_text = (t->type == TUPLE_CSTRING)
+      ? (uint8_t)atoi(t->value->cstring) : (uint8_t)t->value->int32;
     apply_typewriter_text();
+  }
+
+  t = dict_find(iter, MESSAGE_KEY_ShadowOn);
+  if (t) {
+    s_settings.shadow_on = (bool)t->value->int32;
   }
 
   bool bg_changed = false;
   t = dict_find(iter, MESSAGE_KEY_Background);
   if (t) {
-    uint8_t new_bg = 0;
-    if (t->type == TUPLE_CSTRING) {
-      new_bg = (uint8_t)atoi(t->value->cstring);
-    } else {
-      new_bg = (uint8_t)t->value->int32;
-    }
+    uint8_t new_bg = (t->type == TUPLE_CSTRING)
+      ? (uint8_t)atoi(t->value->cstring) : (uint8_t)t->value->int32;
     if (new_bg != s_settings.background) {
       s_settings.background = new_bg;
       bg_changed = true;
@@ -299,36 +362,32 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   if (bg_changed) apply_background();
 }
 
-// ── Clock / date / health update helpers ─────────────────────────────────────
+// ── Clock / date / health update helpers ──────────────────────────────────────
 static void update_clock(struct tm *tick_time) {
   if (clock_is_24h_style()) {
     strftime(s_clock_buf, sizeof(s_clock_buf), "%H:%M", tick_time);
-    layer_set_hidden(text_layer_get_layer(s_ampm_layer), true);
+    s_show_ampm = false;
   } else {
     strftime(s_clock_buf, sizeof(s_clock_buf), "%I:%M", tick_time);
-    strftime(s_ampm_buf, sizeof(s_ampm_buf), "%p", tick_time);
-    text_layer_set_text(s_ampm_layer, s_ampm_buf);
-    layer_set_hidden(text_layer_get_layer(s_ampm_layer), false);
+    strftime(s_ampm_buf,  sizeof(s_ampm_buf),  "%p",    tick_time);
+    s_show_ampm = true;
   }
-  text_layer_set_text(s_clock_layer, s_clock_buf);
+  layer_mark_dirty(s_clock_layer);
 }
 
 static void update_date(struct tm *tick_time) {
   strftime(s_date_buf, sizeof(s_date_buf), "%a %d %b", tick_time);
-  text_layer_set_text(s_date_layer, s_date_buf);
+  layer_mark_dirty(s_date_layer);
 }
 
 static void update_steps() {
   HealthMetric metric = HealthMetricStepCount;
   HealthServiceAccessibilityMask mask =
     health_service_metric_accessible(metric, time_start_of_today(), time(NULL));
-  if (mask & HealthServiceAccessibilityMaskAvailable) {
-    int steps = (int)health_service_sum_today(metric);
-    snprintf(s_steps_buf, sizeof(s_steps_buf), "%d", steps);
-  } else {
-    snprintf(s_steps_buf, sizeof(s_steps_buf), "--");
-  }
-  text_layer_set_text(s_steps_val_layer, s_steps_buf);
+  snprintf(s_steps_buf, sizeof(s_steps_buf),
+    (mask & HealthServiceAccessibilityMaskAvailable) ? "%d" : "--",
+    (mask & HealthServiceAccessibilityMaskAvailable) ? (int)health_service_sum_today(metric) : 0);
+  layer_mark_dirty(s_steps_val_layer);
 }
 
 static void update_sleep() {
@@ -336,19 +395,17 @@ static void update_sleep() {
   HealthServiceAccessibilityMask mask =
     health_service_metric_accessible(metric, time_start_of_today(), time(NULL));
   if (mask & HealthServiceAccessibilityMaskAvailable) {
-    int secs  = (int)health_service_sum_today(metric);
-    int hours = secs / 3600;
-    int mins  = (secs % 3600) / 60;
-    snprintf(s_sleep_buf, sizeof(s_sleep_buf), "%dh%02d", hours, mins);
+    int secs = (int)health_service_sum_today(metric);
+    snprintf(s_sleep_buf, sizeof(s_sleep_buf), "%dh%02d", secs/3600, (secs%3600)/60);
   } else {
     snprintf(s_sleep_buf, sizeof(s_sleep_buf), "--");
   }
-  text_layer_set_text(s_sleep_val_layer, s_sleep_buf);
+  layer_mark_dirty(s_sleep_val_layer);
 }
 
 static void update_battery(BatteryChargeState state) {
   snprintf(s_battery_buf, sizeof(s_battery_buf), "%d%%", state.charge_percent);
-  text_layer_set_text(s_battery_val_layer, s_battery_buf);
+  layer_mark_dirty(s_battery_val_layer);
 }
 
 // ── Service callbacks ─────────────────────────────────────────────────────────
@@ -370,23 +427,10 @@ static void health_handler(HealthEventType event, void *context) {
   }
 }
 
-// ── Layer helpers ─────────────────────────────────────────────────────────────
-static TextLayer *make_icon_layer(GRect frame, const char *icon_char, GFont font) {
-  TextLayer *layer = text_layer_create(frame);
-  text_layer_set_background_color(layer, GColorClear);
-  text_layer_set_text_color(layer, GColorWhite);
-  text_layer_set_font(layer, font);
-  text_layer_set_text_alignment(layer, GTextAlignmentCenter);
-  text_layer_set_text(layer, icon_char);
-  return layer;
-}
-
-static TextLayer *make_val_layer(GRect frame, GFont font) {
-  TextLayer *layer = text_layer_create(frame);
-  text_layer_set_background_color(layer, GColorClear);
-  text_layer_set_text_color(layer, GColorWhite);
-  text_layer_set_font(layer, font);
-  text_layer_set_text_alignment(layer, GTextAlignmentLeft);
+// ── Layer helper (bottom bar custom layers) ──────────────────────────────────
+static Layer *make_bar_layer(GRect frame, LayerUpdateProc proc) {
+  Layer *layer = layer_create(frame);
+  layer_set_update_proc(layer, proc);
   return layer;
 }
 
@@ -396,81 +440,58 @@ static void window_load(Window *window) {
 
   window_set_click_config_provider(window, click_config_provider);
 
-  // Background image
+  // Background
   s_bg_bitmap = gbitmap_create_with_resource(RESOURCE_ID_BACKGROUND);
   s_bg_layer  = bitmap_layer_create(GRect(0, 0, SCREEN_W, SCREEN_H));
   bitmap_layer_set_bitmap(s_bg_layer, s_bg_bitmap);
   bitmap_layer_set_compositing_mode(s_bg_layer, GCompOpSet);
   layer_add_child(root, bitmap_layer_get_layer(s_bg_layer));
 
-  // Load fonts
-  s_font_clock  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_52));
-  s_font_date   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
-  s_font_val    = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_18));
-  s_font_icons  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_MDI_ICONS_18));
+  // Fonts
+  s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_52));
+  s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
+  s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_18));
+  s_font_icons = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_MDI_ICONS_18));
 
-  // Typewriter layer — hidden until flick triggers it
-  s_type_layer = text_layer_create(GRect(0, TYPE_Y, SCREEN_W, TYPE_H));
-  text_layer_set_background_color(s_type_layer, GColorClear);
-  text_layer_set_text_color(s_type_layer, GColorWhite);
-  text_layer_set_font(s_type_layer, s_font_date);
-  text_layer_set_text_alignment(s_type_layer, GTextAlignmentCenter);
-  text_layer_set_overflow_mode(s_type_layer, GTextOverflowModeWordWrap);
-  layer_set_hidden(text_layer_get_layer(s_type_layer), true);
-  layer_add_child(root, text_layer_get_layer(s_type_layer));
+  // Typewriter custom layer
+  s_type_layer = layer_create(GRect(0, TYPE_Y, SCREEN_W, TYPE_H));
+  layer_set_update_proc(s_type_layer, type_layer_update_proc);
+  layer_add_child(root, s_type_layer);
 
-  // Clock layer
-  s_clock_layer = text_layer_create(GRect(0, CLOCK_Y, SCREEN_W, CLOCK_H));
-  text_layer_set_background_color(s_clock_layer, GColorClear);
-  text_layer_set_text_color(s_clock_layer, GColorWhite);
-  text_layer_set_font(s_clock_layer, s_font_clock);
-  text_layer_set_text_alignment(s_clock_layer, GTextAlignmentCenter);
-  layer_add_child(root, text_layer_get_layer(s_clock_layer));
+  // Clock custom layer (spans full width; AM/PM drawn inside it)
+  s_clock_layer = layer_create(GRect(0, CLOCK_Y, SCREEN_W, CLOCK_H));
+  layer_set_update_proc(s_clock_layer, clock_layer_update_proc);
+  layer_add_child(root, s_clock_layer);
 
-  // AM/PM layer — bottom-right of clock, hidden in 24h mode
-  s_ampm_layer = text_layer_create(GRect(AMPM_X, AMPM_Y, AMPM_W, AMPM_H));
-  text_layer_set_background_color(s_ampm_layer, GColorClear);
-  text_layer_set_text_color(s_ampm_layer, GColorWhite);
-  text_layer_set_font(s_ampm_layer, s_font_val);
-  text_layer_set_text_alignment(s_ampm_layer, GTextAlignmentCenter);
-  layer_set_hidden(text_layer_get_layer(s_ampm_layer), !clock_is_24h_style() ? false : true);
-  layer_add_child(root, text_layer_get_layer(s_ampm_layer));
+  // Date custom layer
+  s_date_layer = layer_create(GRect(0, DATE_Y, SCREEN_W, DATE_H));
+  layer_set_update_proc(s_date_layer, date_layer_update_proc);
+  layer_add_child(root, s_date_layer);
 
-  // Date layer
-  s_date_layer = text_layer_create(GRect(0, DATE_Y, SCREEN_W, DATE_H));
-  text_layer_set_background_color(s_date_layer, GColorClear);
-  text_layer_set_text_color(s_date_layer, GColorWhite);
-  text_layer_set_font(s_date_layer, s_font_date);
-  text_layer_set_text_alignment(s_date_layer, GTextAlignmentCenter);
-  layer_add_child(root, text_layer_get_layer(s_date_layer));
+  // Bottom bar
+  s_steps_icon_layer = make_bar_layer(
+    GRect(SEC_X_0, BAR_Y, ICON_W, BAR_H), steps_icon_update_proc);
+  layer_add_child(root, s_steps_icon_layer);
 
-  // ── Bottom bar ─────────────────────────────────────────────────────────────
-  // Section 0: Steps  (x=0, w=66)
-  s_steps_icon_layer = make_icon_layer(
-    GRect(SEC_X_0, BAR_Y, ICON_W, BAR_H), ICON_SHOE, s_font_icons);
-  layer_add_child(root, text_layer_get_layer(s_steps_icon_layer));
+  s_steps_val_layer = make_bar_layer(
+    GRect(SEC_X_0 + ICON_W, BAR_Y, VAL_W_0, BAR_H), steps_val_update_proc);
+  layer_add_child(root, s_steps_val_layer);
 
-  s_steps_val_layer = make_val_layer(
-    GRect(SEC_X_0 + ICON_W, BAR_Y, VAL_W_0, BAR_H), s_font_val);
-  layer_add_child(root, text_layer_get_layer(s_steps_val_layer));
+  s_sleep_icon_layer = make_bar_layer(
+    GRect(SEC_X_1, BAR_Y, ICON_W, BAR_H), sleep_icon_update_proc);
+  layer_add_child(root, s_sleep_icon_layer);
 
-  // Section 1: Sleep  (x=66, w=66)
-  s_sleep_icon_layer = make_icon_layer(
-    GRect(SEC_X_1, BAR_Y, ICON_W, BAR_H), ICON_CHAT_SLEEP, s_font_icons);
-  layer_add_child(root, text_layer_get_layer(s_sleep_icon_layer));
+  s_sleep_val_layer = make_bar_layer(
+    GRect(SEC_X_1 + ICON_W, BAR_Y, VAL_W_1, BAR_H), sleep_val_update_proc);
+  layer_add_child(root, s_sleep_val_layer);
 
-  s_sleep_val_layer = make_val_layer(
-    GRect(SEC_X_1 + ICON_W, BAR_Y, VAL_W_1, BAR_H), s_font_val);
-  layer_add_child(root, text_layer_get_layer(s_sleep_val_layer));
+  s_battery_icon_layer = make_bar_layer(
+    GRect(SEC_X_2, BAR_Y, ICON_W, BAR_H), battery_icon_update_proc);
+  layer_add_child(root, s_battery_icon_layer);
 
-  // Section 2: Battery  (x=132, w=68)
-  s_battery_icon_layer = make_icon_layer(
-    GRect(SEC_X_2, BAR_Y, ICON_W, BAR_H), ICON_BATTERY, s_font_icons);
-  layer_add_child(root, text_layer_get_layer(s_battery_icon_layer));
-
-  s_battery_val_layer = make_val_layer(
-    GRect(SEC_X_2 + ICON_W, BAR_Y, VAL_W_2, BAR_H), s_font_val);
-  layer_add_child(root, text_layer_get_layer(s_battery_val_layer));
+  s_battery_val_layer = make_bar_layer(
+    GRect(SEC_X_2 + ICON_W, BAR_Y, VAL_W_2, BAR_H), battery_val_update_proc);
+  layer_add_child(root, s_battery_val_layer);
 
   // Initial values
   time_t now = time(NULL);
@@ -485,23 +506,21 @@ static void window_load(Window *window) {
 }
 
 static void window_unload(Window *window) {
-  // Cancel any running typewriter timer
   if (s_type_timer) {
     app_timer_cancel(s_type_timer);
     s_type_timer = NULL;
   }
 
-  text_layer_destroy(s_type_layer);
-  text_layer_destroy(s_clock_layer);
-  text_layer_destroy(s_ampm_layer);
-  text_layer_destroy(s_date_layer);
+  layer_destroy(s_type_layer);
+  layer_destroy(s_clock_layer);
+  layer_destroy(s_date_layer);
 
-  text_layer_destroy(s_steps_icon_layer);
-  text_layer_destroy(s_steps_val_layer);
-  text_layer_destroy(s_sleep_icon_layer);
-  text_layer_destroy(s_sleep_val_layer);
-  text_layer_destroy(s_battery_icon_layer);
-  text_layer_destroy(s_battery_val_layer);
+  layer_destroy(s_steps_icon_layer);
+  layer_destroy(s_steps_val_layer);
+  layer_destroy(s_sleep_icon_layer);
+  layer_destroy(s_sleep_val_layer);
+  layer_destroy(s_battery_icon_layer);
+  layer_destroy(s_battery_val_layer);
 
   bitmap_layer_destroy(s_bg_layer);
   gbitmap_destroy(s_bg_bitmap);
@@ -512,11 +531,12 @@ static void window_unload(Window *window) {
   fonts_unload_custom_font(s_font_icons);
 }
 
-// ── App init / deinit ─────────────────────────────────────────────────────────
+// ── Init / deinit ─────────────────────────────────────────────────────────────
 static void init() {
   s_type_timer    = NULL;
   s_type_buf[0]   = '\0';
   s_type_word_idx = 0;
+  s_type_visible  = false;
 
   s_window = window_create();
   window_set_background_color(s_window, GColorBlack);
@@ -526,7 +546,6 @@ static void init() {
   });
 
   load_settings();
-
   window_stack_push(s_window, true);
 
   app_message_register_inbox_received(inbox_received_handler);
@@ -537,7 +556,7 @@ static void init() {
   health_service_events_subscribe(health_handler, NULL);
   accel_tap_service_subscribe(accel_tap_handler);
 
-  s_light_was_on    = light_is_on();
+  s_light_was_on     = light_is_on();
   s_light_poll_timer = app_timer_register(LIGHT_POLL_MS, light_poll_callback, NULL);
 }
 

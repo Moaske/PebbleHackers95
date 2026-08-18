@@ -23,6 +23,12 @@ module.exports = [
         "label": "Typewriter text",
         "defaultValue": "ffffff",
         "sunlight": false
+      },
+      {
+        "type": "toggle",
+        "messageKey": "ShadowOn",
+        "label": "Drop shadow on text",
+        "defaultValue": false
       }
     ]
   },
@@ -34,13 +40,13 @@ module.exports = [
         "defaultValue": "Typewriter text"
       },
       {
-        "type": "select",
+        "type": "radiogroup",
         "messageKey": "TypewriterText",
         "label": "Message",
-        "defaultValue": 0,
+        "defaultValue": "0",
         "options": [
-          { "label": "Mess with the best, die like the rest!", "value": 0 },
-          { "label": "Hack the planet!", "value": 1 }
+          { "label": "Mess with the best, die like the rest!", "value": "0" },
+          { "label": "Hack the planet!", "value": "1" }
         ]
       }
     ]
@@ -58,11 +64,11 @@ module.exports = [
         "label": "Choose background",
         "defaultValue": 0,
         "options": [
-          { "label": "Gibson&Dade Light", "value": 0 },
-          { "label": "Gibson&Dade Dark", "value": 1 },
-          { "label": "Filmposter Purple", "value": 2 },
-          { "label": "Filmposter Blue", "value": 3 },
-          { "label": "Crash&Burn", "value": 4 }
+          { "label": "Light", "value": 0 },
+          { "label": "Dark", "value": 1 },
+          { "label": "Purple", "value": 2 },
+          { "label": "Blue", "value": 3 },
+          { "label": "Dade", "value": 4 }
         ]
       },
       {
