@@ -36,17 +36,20 @@ static Settings s_settings;
 #define CLOCK_H         58
 
 // AM/PM: just right of centered clock digits
-#define AMPM_W          30
-#define AMPM_H          20
-#define AMPM_X          155
-#define AMPM_Y          (CLOCK_Y + CLOCK_H - AMPM_H)
+// AM/PM: right of centered clock digits, Y-aligned to bottom of clock font
+// Clock "00:00" at 52px ≈ 108px wide, centered in 200px → right edge ≈ x=154
+// Add 8px gap → AMPM_X = 162. Use 18px font height + a little slack for H
+#define AMPM_W          32
+#define AMPM_H          22
+#define AMPM_X          162
+#define AMPM_Y          (CLOCK_Y + CLOCK_H - AMPM_H - 2)
 
 // Date: directly below clock
 #define DATE_Y          (CLOCK_Y + CLOCK_H)
 #define DATE_H          28
 
 // Typewriter: just above clock
-#define TYPE_H          58
+#define TYPE_H          52    // room for 2 lines at 18px + leading + shadow
 #define TYPE_Y          (CLOCK_Y - TYPE_H - 4)
 #define TYPE_WORD_MS    300
 #define TYPE_CLEAR_MS   800
@@ -75,6 +78,11 @@ static const char * const WORDS_B[] = {
   "Hack", "the", "planet!"
 };
 #define WORD_COUNT_B    3
+
+static const char * const WORDS_C[] = {
+  "Never", "fear,\nI", "is", "here..."
+};
+#define WORD_COUNT_C    4
 
 static const char * const *s_words     = WORDS_A;
 static int                 s_word_count = WORD_COUNT_A;
@@ -158,13 +166,15 @@ static void clock_layer_update_proc(Layer *layer, GContext *ctx) {
   draw_text_shadowed(ctx, s_clock_buf, s_font_clock, bounds,
                      GTextOverflowModeWordWrap, GTextAlignmentCenter, col, shadow);
 
-  // AM/PM, bottom-right of clock box — only in 12h mode
+  // AM/PM: local coords within the clock layer
+  // AMPM_X is screen-absolute; layer starts at x=0, so local x = AMPM_X
+  // AMPM_Y is screen-absolute; layer starts at CLOCK_Y, so local y = AMPM_Y - CLOCK_Y
   if (s_show_ampm) {
-    GRect ampm_bounds = GRect(AMPM_X - bounds.origin.x,
-                              AMPM_Y - bounds.origin.y,
+    GRect ampm_bounds = GRect(AMPM_X,
+                              AMPM_Y - CLOCK_Y,
                               AMPM_W, AMPM_H);
     draw_text_shadowed(ctx, s_ampm_buf, s_font_val, ampm_bounds,
-                       GTextOverflowModeWordWrap, GTextAlignmentCenter, col, shadow);
+                       GTextOverflowModeWordWrap, GTextAlignmentLeft, col, shadow);
   }
 }
 
@@ -180,7 +190,7 @@ static void date_layer_update_proc(Layer *layer, GContext *ctx) {
 static void type_layer_update_proc(Layer *layer, GContext *ctx) {
   if (!s_type_visible || s_type_buf[0] == '\0') return;
   GRect bounds = layer_get_bounds(layer);
-  draw_text_shadowed(ctx, s_type_buf, s_font_date, bounds,
+  draw_text_shadowed(ctx, s_type_buf, s_font_val, bounds,
                      GTextOverflowModeWordWrap, GTextAlignmentCenter,
                      s_settings.color_typewriter, s_settings.shadow_on);
 }
@@ -302,10 +312,14 @@ static void apply_filter() {
 static void apply_background() {
   if (s_bg_bitmap) gbitmap_destroy(s_bg_bitmap);
   s_bg_bitmap = gbitmap_create_with_resource(
-    s_settings.background == 1 ? RESOURCE_ID_BACKGROUND_DARK   :
-    s_settings.background == 2 ? RESOURCE_ID_BACKGROUND_PURPLE :
-    s_settings.background == 3 ? RESOURCE_ID_BACKGROUND_BLUE   :
-    s_settings.background == 4 ? RESOURCE_ID_BACKGROUND_DADE   :
+    s_settings.background == 1 ? RESOURCE_ID_BACKGROUND_DARK      :
+    s_settings.background == 2 ? RESOURCE_ID_BACKGROUND_PURPLE    :
+    s_settings.background == 3 ? RESOURCE_ID_BACKGROUND_BLUE      :
+    s_settings.background == 4 ? RESOURCE_ID_BACKGROUND_DADE      :
+    s_settings.background == 5 ? RESOURCE_ID_BACKGROUND_CEREAL    :
+    s_settings.background == 6 ? RESOURCE_ID_BACKGROUND_PLAGUE1   :
+    s_settings.background == 7 ? RESOURCE_ID_BACKGROUND_PLAGUE2   :
+    s_settings.background == 8 ? RESOURCE_ID_BACKGROUND_RAZORBLADE:
                                   RESOURCE_ID_BACKGROUND);
   bitmap_layer_set_bitmap(s_bg_layer, s_bg_bitmap);
 }
@@ -314,6 +328,9 @@ static void apply_typewriter_text() {
   if (s_settings.typewriter_text == 1) {
     s_words      = WORDS_B;
     s_word_count = WORD_COUNT_B;
+  } else if (s_settings.typewriter_text == 2) {
+    s_words      = WORDS_C;
+    s_word_count = WORD_COUNT_C;
   } else {
     s_words      = WORDS_A;
     s_word_count = WORD_COUNT_A;
