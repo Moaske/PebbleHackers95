@@ -20,7 +20,8 @@
             "TypewriterText",
             "Background",
             "ShadowOn",
-            "Filter"
+            "Filter",
+            "FontSet"
         ],
         "projectType": "native",
         "resources": {
@@ -122,6 +123,25 @@
                     "name": "BACKGROUND_RAZORBLADE",
                     "targetPlatforms": null,
                     "type": "bitmap"
+                },
+                {
+                    "characterRegex": "[0-9:.]",
+                    "file": "fonts/CheckboxFLF.ttf",
+                    "name": "FONT_CHECKBOX_52",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/CheckboxFLF.ttf",
+                    "name": "FONT_CHECKBOX_24",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/CheckboxFLF.ttf",
+                    "name": "FONT_CHECKBOX_18",
+                    "targetPlatforms": null,
+                    "type": "font"
                 }
             ]
         },
@@ -134,5 +154,5 @@
             "watchface": true
         }
     },
-    "version": "1.4.0"
+    "version": "1.5.0"
 }

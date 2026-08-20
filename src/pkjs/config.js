@@ -73,7 +73,7 @@ module.exports = [
           { "label": "Cereal", "value": 5 },
           { "label": "Plague 1", "value": 6 },
           { "label": "Plague 2", "value": 7 },
-          { "label": "Razor & Blade", "value": 8 }
+          { "label": "Razorblade", "value": 8 }
         ]
       },
       {
@@ -98,6 +98,25 @@ module.exports = [
           { "label": "None", "value": 0 },
           { "label": "Light (33%)", "value": 1 },
           { "label": "Heavy (66%)", "value": 2 }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "Font"
+      },
+      {
+        "type": "select",
+        "messageKey": "FontSet",
+        "label": "Choose font",
+        "defaultValue": 0,
+        "options": [
+          { "label": "Confidential", "value": 0 },
+          { "label": "Checkbox", "value": 1 }
         ]
       }
     ]

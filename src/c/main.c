@@ -10,7 +10,7 @@
 #include <pebble.h>
 
 // ── Persistent settings ───────────────────────────────────────────────────────
-#define SETTINGS_KEY    42
+#define SETTINGS_KEY    43
 
 typedef struct {
   GColor  color_main;        // clock, date, bar text
@@ -19,6 +19,7 @@ typedef struct {
   uint8_t background;        // 0-4
   uint8_t filter;            // 0=none, 1=33% black, 2=66% black
   bool    shadow_on;         // drop shadow behind clock/date/typewriter
+  uint8_t font_set;          // 0=Confidential, 1=Chiq Bold
 } Settings;
 
 static Settings s_settings;
@@ -55,7 +56,7 @@ static Settings s_settings;
 #define TYPE_CLEAR_MS   800
 
 // Bottom bar
-#define BAR_H           24
+#define BAR_H           28
 #define BAR_Y           (SCREEN_H - BAR_H)
 #define SEC_W_0         66
 #define SEC_W_1         66
@@ -263,32 +264,35 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 // ── Bottom bar LayerUpdateProcs ──────────────────────────────────────────────
 static void steps_icon_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
+  b.origin.y += 8;
   draw_text_shadowed(ctx, ICON_WALK, s_font_icons, b,
     GTextOverflowModeWordWrap, GTextAlignmentCenter, s_settings.color_main, s_settings.shadow_on);
 }
 static void steps_val_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
-  draw_text_shadowed(ctx, s_steps_buf, s_font_val, b,
+  draw_text_shadowed(ctx, s_steps_buf, fonts_get_system_font(FONT_KEY_GOTHIC_24), b,
     GTextOverflowModeWordWrap, GTextAlignmentLeft, s_settings.color_main, s_settings.shadow_on);
 }
 static void sleep_icon_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
+  b.origin.y += 8;
   draw_text_shadowed(ctx, ICON_CHAT_SLEEP, s_font_icons, b,
     GTextOverflowModeWordWrap, GTextAlignmentCenter, s_settings.color_main, s_settings.shadow_on);
 }
 static void sleep_val_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
-  draw_text_shadowed(ctx, s_sleep_buf, s_font_val, b,
+  draw_text_shadowed(ctx, s_sleep_buf, fonts_get_system_font(FONT_KEY_GOTHIC_24), b,
     GTextOverflowModeWordWrap, GTextAlignmentLeft, s_settings.color_main, s_settings.shadow_on);
 }
 static void battery_icon_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
+  b.origin.y += 8;
   draw_text_shadowed(ctx, ICON_BATTERY_V, s_font_icons, b,
     GTextOverflowModeWordWrap, GTextAlignmentCenter, s_settings.color_main, s_settings.shadow_on);
 }
 static void battery_val_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
-  draw_text_shadowed(ctx, s_battery_buf, s_font_val, b,
+  draw_text_shadowed(ctx, s_battery_buf, fonts_get_system_font(FONT_KEY_GOTHIC_24), b,
     GTextOverflowModeWordWrap, GTextAlignmentLeft, s_settings.color_main, s_settings.shadow_on);
 }
 
@@ -307,6 +311,28 @@ static void apply_filter() {
       : RESOURCE_ID_FILTER_33);
   bitmap_layer_set_bitmap(s_filter_layer, s_filter_bitmap);
   layer_set_hidden(bitmap_layer_get_layer(s_filter_layer), false);
+}
+
+static void apply_fonts() {
+  // Unload current fonts before loading new ones
+  if (s_font_clock) fonts_unload_custom_font(s_font_clock);
+  if (s_font_date)  fonts_unload_custom_font(s_font_date);
+  if (s_font_val)   fonts_unload_custom_font(s_font_val);
+
+  if (s_settings.font_set == 1) {
+    s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_52));
+    s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_24));
+    s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_18));
+  } else {
+    s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_52));
+    s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
+    s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_18));
+  }
+
+  // Redraw all layers that use these fonts (only if layers already exist)
+  if (s_clock_layer)       layer_mark_dirty(s_clock_layer);
+  if (s_date_layer)        layer_mark_dirty(s_date_layer);
+  if (s_type_layer)        layer_mark_dirty(s_type_layer);
 }
 
 static void apply_background() {
@@ -356,6 +382,7 @@ static void load_settings() {
   s_settings.background       = 0;
   s_settings.filter           = 0;
   s_settings.shadow_on        = false;
+  s_settings.font_set         = 0;
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   }
@@ -384,6 +411,17 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
     s_settings.shadow_on = (bool)t->value->int32;
   }
 
+  bool font_changed = false;
+  t = dict_find(iter, MESSAGE_KEY_FontSet);
+  if (t) {
+    uint8_t new_font = (t->type == TUPLE_CSTRING)
+      ? (uint8_t)atoi(t->value->cstring) : (uint8_t)t->value->int32;
+    if (new_font != s_settings.font_set) {
+      s_settings.font_set = new_font;
+      font_changed = true;
+    }
+  }
+
   bool filter_changed = false;
   t = dict_find(iter, MESSAGE_KEY_Filter);
   if (t) {
@@ -408,6 +446,7 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
 
   persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   apply_colors();
+  if (font_changed) apply_fonts();
   if (bg_changed) apply_background();
   if (filter_changed) apply_filter();
 }
@@ -498,10 +537,11 @@ static void window_load(Window *window) {
   layer_add_child(root, bitmap_layer_get_layer(s_bg_layer));
 
   // Fonts
-  s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_52));
-  s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
-  s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_18));
+  s_font_clock = NULL;
+  s_font_date  = NULL;
+  s_font_val   = NULL;
   s_font_icons = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_MDI_ICONS_18));
+  apply_fonts();  // loads correct font set based on settings
 
   // Neutral density filter layer — sits above background, below text
   s_filter_bitmap = NULL;
@@ -585,9 +625,9 @@ static void window_unload(Window *window) {
   bitmap_layer_destroy(s_bg_layer);
   gbitmap_destroy(s_bg_bitmap);
 
-  fonts_unload_custom_font(s_font_clock);
-  fonts_unload_custom_font(s_font_date);
-  fonts_unload_custom_font(s_font_val);
+  if (s_font_clock) fonts_unload_custom_font(s_font_clock);
+  if (s_font_date)  fonts_unload_custom_font(s_font_date);
+  if (s_font_val)   fonts_unload_custom_font(s_font_val);
   fonts_unload_custom_font(s_font_icons);
 }
 
@@ -597,6 +637,15 @@ static void init() {
   s_type_buf[0]   = '\0';
   s_type_word_idx = 0;
   s_type_visible  = false;
+  s_font_clock    = NULL;
+  s_font_date     = NULL;
+  s_font_val      = NULL;
+  s_clock_layer        = NULL;
+  s_date_layer         = NULL;
+  s_type_layer         = NULL;
+  s_steps_val_layer    = NULL;
+  s_sleep_val_layer    = NULL;
+  s_battery_val_layer  = NULL;
 
   s_window = window_create();
   window_set_background_color(s_window, GColorBlack);
