@@ -45,13 +45,6 @@
                     "type": "font"
                 },
                 {
-                    "file": "images/app_icon_hackers95.png",
-                    "menuIcon": true,
-                    "name": "APP_ICON_HACKERS95",
-                    "targetPlatforms": null,
-                    "type": "bitmap"
-                },
-                {
                     "file": "images/hackers95_backgr.png",
                     "name": "BACKGROUND",
                     "targetPlatforms": null,
@@ -142,6 +135,13 @@
                     "name": "FONT_CHECKBOX_18",
                     "targetPlatforms": null,
                     "type": "font"
+                },
+                {
+                    "file": "images/app_icon_hackers95.png",
+                    "menuIcon": true,
+                    "name": "APP_ICON_HACKERS95",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
                 }
             ]
         },
@@ -154,5 +154,5 @@
             "watchface": true
         }
     },
-    "version": "1.5.0"
+    "version": "1.5.1"
 }

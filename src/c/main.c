@@ -53,7 +53,7 @@ static Settings s_settings;
 #define TYPE_H          52    // room for 2 lines at 18px + leading + shadow
 #define TYPE_Y          (CLOCK_Y - TYPE_H - 4)
 #define TYPE_WORD_MS    300
-#define TYPE_CLEAR_MS   800
+#define TYPE_CLEAR_MS   1000
 
 // Bottom bar
 #define BAR_H           28
@@ -326,7 +326,7 @@ static void apply_fonts() {
   } else {
     s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_52));
     s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
-    s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_18));
+    s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
   }
 
   // Redraw all layers that use these fonts (only if layers already exist)
