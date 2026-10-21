@@ -116,7 +116,9 @@ module.exports = [
         "defaultValue": 0,
         "options": [
           { "label": "Confidential", "value": 0 },
-          { "label": "Checkbox", "value": 1 }
+          { "label": "Checkbox", "value": 1 },
+          { "label": "Crash Override", "value": 2 },
+          { "label": "C64 Keyboard", "value": 3 }
         ]
       }
     ]

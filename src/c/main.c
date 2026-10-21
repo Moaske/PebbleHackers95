@@ -19,7 +19,7 @@ typedef struct {
   uint8_t background;        // 0-4
   uint8_t filter;            // 0=none, 1=33% black, 2=66% black
   bool    shadow_on;         // drop shadow behind clock/date/typewriter
-  uint8_t font_set;          // 0=Confidential, 1=Chiq Bold
+  uint8_t font_set;          // 0=Confidential, 1=Checkbox, 2=Crash Override, 3=C64 Keyboard
 } Settings;
 
 static Settings s_settings;
@@ -313,20 +313,41 @@ static void apply_filter() {
   layer_set_hidden(bitmap_layer_get_layer(s_filter_layer), false);
 }
 
+// NOTE on font resource names: the SDK derives a font's pixel height from the
+// FIRST run of digits in the resource name (re.search('([0-9]+)', name)).
+// So a name must contain no digits before the size suffix — "FONT_C64_52"
+// would be built at 64px, not 52. Hence FONT_COMMODORE_* for C64Keyboard.ttf.
 static void apply_fonts() {
   // Unload current fonts before loading new ones
   if (s_font_clock) fonts_unload_custom_font(s_font_clock);
   if (s_font_date)  fonts_unload_custom_font(s_font_date);
   if (s_font_val)   fonts_unload_custom_font(s_font_val);
 
-  if (s_settings.font_set == 1) {
-    s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_52));
-    s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_24));
-    s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_18));
-  } else {
-    s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_52));
-    s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
-    s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
+  switch (s_settings.font_set) {
+    case 1:   // Checkbox
+      s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_52));
+      s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_24));
+      s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CHECKBOX_18));
+      break;
+
+    case 2:   // Crash Override
+      s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CRASHOVERRIDE_52));
+      s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CRASHOVERRIDE_24));
+      s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CRASHOVERRIDE_18));
+      break;
+
+    case 3:   // C64 Keyboard
+      s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_COMMODORE_52));
+      s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_COMMODORE_24));
+      s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_COMMODORE_20));
+      break;
+
+    case 0:   // Confidential
+    default:
+      s_font_clock = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_52));
+      s_font_date  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
+      s_font_val   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_CONFIDENTIAL_24));
+      break;
   }
 
   // Redraw all layers that use these fonts (only if layers already exist)

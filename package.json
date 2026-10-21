@@ -142,6 +142,42 @@
                     "name": "APP_ICON_HACKERS95",
                     "targetPlatforms": null,
                     "type": "bitmap"
+                },
+                {
+                    "file": "fonts/C64Keyboard.ttf",
+                    "name": "FONT_COMMODORE_52",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/C64Keyboard.ttf",
+                    "name": "FONT_COMMODORE_24",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/C64Keyboard.ttf",
+                    "name": "FONT_COMMODORE_20",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/CrashOverride.ttf",
+                    "name": "FONT_CRASHOVERRIDE_52",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/CrashOverride.ttf",
+                    "name": "FONT_CRASHOVERRIDE_24",
+                    "targetPlatforms": null,
+                    "type": "font"
+                },
+                {
+                    "file": "fonts/CrashOverride.ttf",
+                    "name": "FONT_CRASHOVERRIDE_18",
+                    "targetPlatforms": null,
+                    "type": "font"
                 }
             ]
         },
@@ -154,5 +190,5 @@
             "watchface": true
         }
     },
-    "version": "1.5.1"
+    "version": "1.5.2"
 }
